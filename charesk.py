@@ -230,7 +230,7 @@ class NewTab(object):
         
         self.message_var = tk.StringVar(self.main_frame)
         self.message_entry = tk.Entry(self.main_frame, textvariable=self.message_var)
-        self.message_entry.bind("<Return>", lambda msg=self.message_var.get(): self.send_message(msg))
+        self.message_entry.bind("<Return>", lambda event: self.send_message())
         self.message_entry.grid(row=2, column=0, columnspan=2, sticky=tk.S+tk.E+tk.W, padx=5, pady=5)
         
         #enter_button = tk.Button(self.main_frame, text="Send", command=lambda: self.send_message(self.message_var.get()))
@@ -315,9 +315,10 @@ class NewTab(object):
         else:
             pass
             
-    def send_message(self, msg):
-        requests.post("http://charatrp.com/chat_ajax/post", cookies=self.cookies, data={ "chat": self.chat, "line":  msg })
+    def send_message(self):
+        msg = self.message_var.get()
         self.message_entry.delete(0, tk.END)
+        requests.post("http://charatrp.com/chat_ajax/post", cookies=self.cookies, data={ "chat": self.chat, "line": msg })
 
     def close(self):
         requests.post("http://charatrp.com/chat_ajax/quit", cookies=self.cookies, data={ "chat": self.chat, "after": self.counter })
