@@ -1,4 +1,4 @@
-#!/usr/bin/python
+﻿#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """
@@ -12,7 +12,12 @@ import tkFont
 import requests
 import json
 
-import threading
+import thread
+
+import uuid
+
+WIN_CLOSE = False
+TAB_LIST = []
 
 class MainWin(tk.Frame):
   
@@ -24,9 +29,9 @@ class MainWin(tk.Frame):
         self.notebook = ttk.Notebook(self, padding=0)
         
         #Fonts
-        self.courier30 = tkFont.Font(family="Courier New", size="30")
-        self.courier20 = tkFont.Font(family="Courier New", size="20")
-        self.courier10 = tkFont.Font(family="Courier New", size="10")
+        self.courier30 = tkFont.Font(family="Courier New", size="30", weight="bold")
+        self.courier20 = tkFont.Font(family="Courier New", size="20", weight="bold")
+        self.courier10 = tkFont.Font(family="Courier New", size="10", weight="bold")
         
         
         #Variables
@@ -44,6 +49,9 @@ class MainWin(tk.Frame):
         self.color_var = None
         self.color_entry = None
         self.color_clicked = False
+        
+        self.url_var = None
+        self.url_entry = None
         
         self.typing_error = None
         
@@ -111,13 +119,13 @@ class MainWin(tk.Frame):
         chat_b.grid(row=4, column=1, columnspan=2, padx=20, pady=20)
         
         #Group chat name entry
-        url_var = tk.StringVar(self.main_frame)
-        url_entry = tk.Entry(self.main_frame, textvariable=url_var)
-        url_entry.grid(row=6, column=1, columnspan=2, padx=10, pady=10)
+        self.url_var = tk.StringVar(self.main_frame)
+        self.url_entry = tk.Entry(self.main_frame, textvariable=self.url_var)
+        self.url_entry.grid(row=6, column=1, columnspan=2, padx=10, pady=10)
         
         #Start chatting button
         chat_b = tk.Button(self.main_frame, relief=tk.GROOVE, text="Start Chatting", bg="#CCFFCC", 
-        command=lambda: self.init_chat(url_var.get()))
+        command=lambda: self.init_chat(self.url_var.get()))
         chat_b.grid(row=7, column=1, columnspan=2, sticky=tk.N, padx=10, pady=10)
         
     def resize(self, widget, rowcol, num):
@@ -164,7 +172,9 @@ class MainWin(tk.Frame):
 class NewTab(object):
     
     def __init__(self, parent, url):
-        
+            
+            TAB_LIST.append(self)
+            
             self.url = url
             self.parent = parent
             
@@ -174,13 +184,24 @@ class NewTab(object):
             self.main_frame = tk.Frame(self.tab, bg="#CCFFCC")
             self.side_frame = tk.Frame(self.tab, bg="#CCFFCC")
             
+            self.messagescroll = None
+            
             self.message_var = tk.StringVar(self.main_frame)
             self.message_entry = None
+            
+            self.name = main.user_var.get()
+            self.alias = main.alias_var.get()
+            self.color = main.color_var.get()
+            self.cookies = { "session": "GLIH5XTNKKMRAW" }
+            self.chat = main.url_var.get()
+            
+            self.tab_open = True
         
             self.initUI()
             
-            threading.Thread(target = self.display_messages).start()
-        
+            thread.start_new_thread(self.display_messages, ())
+            
+
     def initUI(self):
         
         self.tab.lift()
@@ -195,25 +216,30 @@ class NewTab(object):
 
         #tk.Message(self.main_frame, font=self.parent.courier10, text=self.url, bg="#CCFFCC", width=300).grid(row=0, sticky=tk.N+tk.W)
         
-        self.message_area = tk.Text(self.main_frame, font=self.parent.courier10)
-        self.message_area.grid(row=1, columnspan=2, padx=5, pady=5, sticky=tk.N+tk.S+tk.E+tk.W)
+        self.messagescroll = tk.Scrollbar(self.main_frame)
+        self.messagescroll.grid(row=1, column=3, pady=5, sticky=tk.N+tk.S+tk.E)
+
+        self.message_area = tk.Text(self.main_frame, wrap="word", font=self.parent.courier10,  yscrollcommand=self.messagescroll.set)
+        self.message_area.grid(row=1, columnspan=2, pady=5, sticky=tk.N+tk.S+tk.E+tk.W)
         
         #self.message_area.insert(tk.END, "Person 1 [Person1] joined chat.\nPerson 2 [Person2] joined chat.\nPerson1: hi\nPerson1: whats up")
         
         self.message_area.config(state=tk.DISABLED)
         
+        self.messagescroll.config(command=self.message_area.yview)
+        
         self.message_var = tk.StringVar(self.main_frame)
         self.message_entry = tk.Entry(self.main_frame, textvariable=self.message_var)
-        #self.message_entry.bind("<Return>", self.send_message)
+        self.message_entry.bind("<Return>", lambda msg=self.message_var.get(): self.send_message(msg))
         self.message_entry.grid(row=2, column=0, columnspan=2, sticky=tk.S+tk.E+tk.W, padx=5, pady=5)
         
-        #   enter_button = tk.Button(self.main_frame, text="Send", command=lambda: self.send_message(message_var.get()))
-        #   enter_button.grid(row=2, column=1, padx=5, pady=5, sticky=tk.S+tk.E)
+        #enter_button = tk.Button(self.main_frame, text="Send", command=lambda: self.send_message(self.message_var.get()))
+        #enter_button.grid(row=2, column=1, padx=5, pady=5, sticky=tk.S+tk.E)
         
         self.resize(self.side_frame, 2, 0)
         self.side_frame.grid(row=0, column=2, sticky=tk.N+tk.S+tk.E+tk.W)
         
-        close_button = tk.Button(self.side_frame, text="Close Chat", command=self.tab.destroy)
+        close_button = tk.Button(self.side_frame, text="Close Chat", command=self.close)
         close_button.grid(padx=5, pady=5)
         settings_button = tk.Button(self.side_frame, text="Settings", command=None)
         settings_button.grid(padx=5, pady=5)
@@ -228,25 +254,41 @@ class NewTab(object):
         else:
             widget.rowconfigure(num, weight=1)
             widget.columnconfigure(num, weight=1)
-            
+
     def display_messages(self):
-        cookies = { "session": "GLIH5XTNKKMRAW" }
-        chat = "theoubliette"
         self.counter = -1
-        r = requests.post("http://charatrp.com/chat_ajax/messages", cookies=cookies, data={ "chat": chat, "after": self.counter })
+        r = requests.post("http://charatrp.com/chat_ajax/messages", cookies=self.cookies, data={ "chat": self.chat, "after": self.counter })
         first_query = json.loads(r.text)
 
-        #for message_data in first_query['messages']:
-        #msg = message_data['line'].encode("utf8")
-        #self.display(msg)
+        for message_data in first_query['messages']:
+            msgcol = message_data['color']
+            msg = message_data['line'].encode("utf8")
+            self.display_before(msg, msgcol)
+            
+        self.message_area.yview(tk.END)
 
         self.counter = len(first_query['messages'])
         
-        while True:
-            chatLine = json.loads(requests.post("http://charatrp.com/chat_ajax/messages", cookies=cookies, data={ "chat": chat, "after": self.counter }).text)
+        while self.tab_open:
+            chatLine = json.loads(requests.post("http://charatrp.com/chat_ajax/messages", cookies=self.cookies, data={ "chat": self.chat, "after": self.counter }).text)
             self.display(chatLine)
     
-   #    def display_before(self, msg):
+    def display_before(self, msg, msgcol):
+        if len(msg) > 0:
+            
+            color = str("#" + msgcol)
+               
+            self.message_area.config(state=tk.NORMAL)
+            self.message_area.insert(tk.END, "\n" + msg)
+            self.message_area.config(state=tk.DISABLED)
+                    
+            linenum = int(self.message_area.index('end-1c').split('.')[0])
+            
+            tag_id = str(uuid.uuid4())
+            self.message_area.tag_add(tag_id, str(linenum) + ".0", str(linenum) + ".end")
+            self.message_area.tag_config(tag_id, foreground=color)
+        else:
+            pass
         
            
     def display(self, msg):
@@ -254,31 +296,44 @@ class NewTab(object):
             
             color = str("#" + str(msg['messages'][0]['color']))
             
-            message = msg['messages'][0]['line']
+            message = msg['messages'][0]['line'].encode("utf-8")
                
             self.message_area.config(state=tk.NORMAL)
             self.message_area.insert(tk.END, "\n" + message)
+            self.message_area.config(state=tk.DISABLED)
                     
             linenum = int(self.message_area.index('end-1c').split('.')[0])
-            self.message_area.tag_add("line", str(linenum) + ".0", str(linenum) + ".end")
-            self.message_area.tag_config("line", foreground=color)
+            
+            tag_id = str(uuid.uuid4())
+            self.message_area.tag_add(tag_id, str(linenum) + ".0", str(linenum) + ".end")
+            self.message_area.tag_config(tag_id, foreground=color)
                     
             self.counter = msg['messages'][0]['id'] + 1
+            
+            self.message_area.yview(tk.END)
+            
         else:
             pass
+            
+    def send_message(self, msg):
+        requests.post("http://charatrp.com/chat_ajax/post", cookies=self.cookies, data={ "chat": self.chat, "line":  msg })
+        self.message_entry.delete(0, tk.END)
 
-def main():
+    def close(self):
+        requests.post("http://charatrp.com/chat_ajax/quit", cookies=self.cookies, data={ "chat": self.chat, "after": self.counter })
+        self.tab_open = False
+        self.tab.destroy()
 
-    root = tk.Tk()
-    root.geometry("800x600+50+50")
-    app = MainWin(root)
-    root.mainloop()  
+def close():
+    for tab in TAB_LIST:
+        tab.close()
+    root.destroy()
 
-
-if __name__ == '__main__':
-    main()  
-
-    
+root = tk.Tk()
+root.geometry("800x600+50+50")
+root.protocol("WM_DELETE_WINDOW", close)
+main = MainWin(root)
+root.mainloop()  
     
     
 '''
